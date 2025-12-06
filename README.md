@@ -21,7 +21,13 @@
 ## 安装和运行
 
 ### 自动安装（推荐）
-
+#### 1.下载：
+```linux
+https://wzmwayne.github.io/print_helper/setup_linux.sh
+```
+```windows
+https://wzmwayne.github.io/print_helper/setup_windows.bat
+```
 #### Linux系统：
 如果遇到权限问题，可以先运行：
 chmod +x setup_linux.sh
