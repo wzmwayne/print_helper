@@ -83,4 +83,4 @@ python print_helper.py
 
 ## 浏览器兼容性
 
-支持所有现代浏览器（Chrome, Firefox, Safari, Edge等）
+支持大多现代浏览器（Chrome, Firefox, Safari, Edge等）
