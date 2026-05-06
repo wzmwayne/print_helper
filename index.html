@@ -2,12 +2,12 @@
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
-    <title>手动双面打印助手 - 极简版</title>
+    <title>手动双面打印助手 - 灵蝶版</title>
     <script src="https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
 </head>
 <body>
     <h1>📄 手动双面打印助手</h1>
-    <p>上传PDF，自动分离奇偶页并逆序排列</p>
+    <p>上传PDF，自动分离奇偶页并逆序排列（需灵蝶）</p>
     
     <input type="file" id="fileInput" accept=".pdf">
     <br><br>
@@ -22,7 +22,22 @@
         <a id="downloadEven" href="#" download="偶数页.pdf">下载偶数页</a>
     </div>
 
-    <!-- 原 script 块已迁移为灵蝶格式 -->
+    <!-- 灵蝶未安装提示 -->
+    <div id="sw-install-hint" style="position:fixed;bottom:20px;right:20px;background:#2c3e50;color:#ecf0f1;padding:10px 16px;font-size:14px;z-index:9999;display:none;">
+        ⚡ 本页面有动态功能，<a href="https://github.com/wzmwayne/ScriptWeaver" target="_blank" style="color:#3b82f6;">安装灵蝶</a> 后体验更好。
+    </div>
+    
+    <!-- 灵蝶未安装检测（普通脚本，所有浏览器均执行） -->
+    <script>
+        (function() {
+            // 灵蝶运行时会设置 window.__ScriptWeaver__ = true，若不存在则显示提示
+            if (!window.__ScriptWeaver__) {
+                document.getElementById('sw-install-hint').style.display = 'block';
+            }
+        })();
+    </script>
+
+    <!-- 核心功能由灵蝶注入执行 -->
     <script type="x-tm-inline">
         const fileInput = document.getElementById('fileInput');
         const processBtn = document.getElementById('processBtn');
@@ -61,27 +76,21 @@
                 statusP.textContent = `共 ${totalPages} 页，正在分离...`;
                 progressBar.max = totalPages;
 
-                // 创建奇数页PDF（逆序）
                 const oddDoc = await PDFLib.PDFDocument.create();
-                // 创建偶数页PDF（逆序）
                 const evenDoc = await PDFLib.PDFDocument.create();
 
-                // 收集页面索引（从0开始）
                 const oddIndices = [];
                 const evenIndices = [];
                 for (let i = 0; i < totalPages; i++) {
-                    if (i % 2 === 0) { // 奇数页（索引0是第1页）
+                    if (i % 2 === 0) {
                         oddIndices.push(i);
                     } else {
                         evenIndices.push(i);
                     }
                 }
-                // 逆序处理奇数页
                 oddIndices.reverse();
-                // 逆序处理偶数页
                 evenIndices.reverse();
 
-                // 复制页面并更新进度
                 let processed = 0;
                 for (const idx of oddIndices) {
                     const [copiedPage] = await oddDoc.copyPages(pdfDoc, [idx]);
@@ -99,7 +108,6 @@
                     statusP.textContent = `处理偶数页 ${processed - oddIndices.length}/${evenIndices.length}`;
                 }
 
-                // 生成下载链接
                 const oddPdfBytes = await oddDoc.save();
                 const evenPdfBytes = await evenDoc.save();
 
