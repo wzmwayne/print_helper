@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>手动双面打印助手 - 极简版</title>
+    <script src="https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
+</head>
+<body>
+    <h1>📄 手动双面打印助手</h1>
+    <p>上传PDF，自动分离奇偶页并逆序排列</p>
+    
+    <input type="file" id="fileInput" accept=".pdf">
+    <br><br>
+    <button id="processBtn" disabled>开始处理</button>
+    
+    <p id="status">就绪</p>
+    <progress id="progressBar" value="0" max="100"></progress>
+    
+    <div id="resultArea" hidden>
+        <p id="resultInfo"></p>
+        <a id="downloadOdd" href="#" download="奇数页.pdf">下载奇数页</a>
+        <a id="downloadEven" href="#" download="偶数页.pdf">下载偶数页</a>
+    </div>
+
+    <!-- 原 script 块已迁移为灵蝶格式 -->
+    <script type="x-tm-inline">
+        const fileInput = document.getElementById('fileInput');
+        const processBtn = document.getElementById('processBtn');
+        const statusP = document.getElementById('status');
+        const progressBar = document.getElementById('progressBar');
+        const resultArea = document.getElementById('resultArea');
+        const resultInfo = document.getElementById('resultInfo');
+        const downloadOdd = document.getElementById('downloadOdd');
+        const downloadEven = document.getElementById('downloadEven');
+
+        let selectedFile = null;
+
+        fileInput.addEventListener('change', () => {
+            selectedFile = fileInput.files[0];
+            if (selectedFile && selectedFile.type === 'application/pdf') {
+                processBtn.disabled = false;
+                statusP.textContent = '已选择文件：' + selectedFile.name;
+            } else {
+                processBtn.disabled = true;
+                statusP.textContent = '请选择有效的PDF文件';
+            }
+        });
+
+        processBtn.addEventListener('click', async () => {
+            if (!selectedFile) return;
+            processBtn.disabled = true;
+            statusP.textContent = '读取文件中...';
+            progressBar.value = 0;
+            resultArea.hidden = true;
+
+            try {
+                const arrayBuffer = await selectedFile.arrayBuffer();
+                const pdfDoc = await PDFLib.PDFDocument.load(arrayBuffer);
+                const totalPages = pdfDoc.getPageCount();
+                
+                statusP.textContent = `共 ${totalPages} 页，正在分离...`;
+                progressBar.max = totalPages;
+
+                // 创建奇数页PDF（逆序）
+                const oddDoc = await PDFLib.PDFDocument.create();
+                // 创建偶数页PDF（逆序）
+                const evenDoc = await PDFLib.PDFDocument.create();
+
+                // 收集页面索引（从0开始）
+                const oddIndices = [];
+                const evenIndices = [];
+                for (let i = 0; i < totalPages; i++) {
+                    if (i % 2 === 0) { // 奇数页（索引0是第1页）
+                        oddIndices.push(i);
+                    } else {
+                        evenIndices.push(i);
+                    }
+                }
+                // 逆序处理奇数页
+                oddIndices.reverse();
+                // 逆序处理偶数页
+                evenIndices.reverse();
+
+                // 复制页面并更新进度
+                let processed = 0;
+                for (const idx of oddIndices) {
+                    const [copiedPage] = await oddDoc.copyPages(pdfDoc, [idx]);
+                    oddDoc.addPage(copiedPage);
+                    processed++;
+                    progressBar.value = processed;
+                    statusP.textContent = `处理奇数页 ${processed}/${oddIndices.length}`;
+                }
+
+                for (const idx of evenIndices) {
+                    const [copiedPage] = await evenDoc.copyPages(pdfDoc, [idx]);
+                    evenDoc.addPage(copiedPage);
+                    processed++;
+                    progressBar.value = processed;
+                    statusP.textContent = `处理偶数页 ${processed - oddIndices.length}/${evenIndices.length}`;
+                }
+
+                // 生成下载链接
+                const oddPdfBytes = await oddDoc.save();
+                const evenPdfBytes = await evenDoc.save();
+
+                const oddBlob = new Blob([oddPdfBytes], { type: 'application/pdf' });
+                const evenBlob = new Blob([evenPdfBytes], { type: 'application/pdf' });
+
+                downloadOdd.href = URL.createObjectURL(oddBlob);
+                downloadEven.href = URL.createObjectURL(evenBlob);
+
+                resultInfo.textContent = `完成：原始 ${totalPages} 页 → 奇数页 ${oddDoc.getPageCount()} 页，偶数页 ${evenDoc.getPageCount()} 页`;
+                resultArea.hidden = false;
+                statusP.textContent = '处理完成，可点击下载';
+            } catch (error) {
+                statusP.textContent = '错误：' + error.message;
+                console.error(error);
+            } finally {
+                processBtn.disabled = false;
+            }
+        });
+    </script>
+</body>
+</html>
