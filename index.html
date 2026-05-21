@@ -18,6 +18,7 @@
     
     <div id="resultArea" hidden>
         <p id="resultInfo"></p>
+        <!-- 打印按钮会动态插入到这里 -->
         <a id="downloadOdd" href="#" download="奇数页.pdf">下载奇数页</a>
         <a id="downloadEven" href="#" download="偶数页.pdf">下载偶数页</a>
     </div>
@@ -30,7 +31,6 @@
     <!-- 灵蝶未安装检测（普通脚本，所有浏览器均执行） -->
     <script>
         (function() {
-            // 灵蝶运行时会设置 window.__ScriptWeaver__ = true，若不存在则显示提示
             if (!window.__ScriptWeaver__) {
                 document.getElementById('sw-install-hint').style.display = 'block';
             }
@@ -67,6 +67,12 @@
             statusP.textContent = '读取文件中...';
             progressBar.value = 0;
             resultArea.hidden = true;
+
+            // 移除旧的打印按钮（如果存在）
+            const oldPrintOdd = document.getElementById('printOddBtn');
+            const oldPrintEven = document.getElementById('printEvenBtn');
+            if (oldPrintOdd) oldPrintOdd.remove();
+            if (oldPrintEven) oldPrintEven.remove();
 
             try {
                 const arrayBuffer = await selectedFile.arrayBuffer();
@@ -118,8 +124,30 @@
                 downloadEven.href = URL.createObjectURL(evenBlob);
 
                 resultInfo.textContent = `完成：原始 ${totalPages} 页 → 奇数页 ${oddDoc.getPageCount()} 页，偶数页 ${evenDoc.getPageCount()} 页`;
+                
+                // 创建打印按钮
+                const printOddBtn = document.createElement('button');
+                printOddBtn.id = 'printOddBtn';
+                printOddBtn.textContent = '🖨️ 打印奇数页';
+                printOddBtn.style.marginRight = '8px';
+
+                const printEvenBtn = document.createElement('button');
+                printEvenBtn.id = 'printEvenBtn';
+                printEvenBtn.textContent = '🖨️ 打印偶数页';
+
+                printOddBtn.addEventListener('click', () => {
+                    window.open(downloadOdd.href);
+                });
+                printEvenBtn.addEventListener('click', () => {
+                    window.open(downloadEven.href);
+                });
+
+                // 将按钮插入到下载链接之前
+                resultArea.insertBefore(printEvenBtn, downloadOdd);
+                resultArea.insertBefore(printOddBtn, printEvenBtn);
+
                 resultArea.hidden = false;
-                statusP.textContent = '处理完成，可点击下载';
+                statusP.textContent = '处理完成，可点击下载或打印';
             } catch (error) {
                 statusP.textContent = '错误：' + error.message;
                 console.error(error);
