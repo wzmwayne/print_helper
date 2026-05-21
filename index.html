@@ -236,7 +236,7 @@
         }
 
         function renderPage(page, pageNum) {
-            const viewport = page.getViewport({ scale: 2 }); // 提高清晰度
+            const viewport = page.getViewport({ scale: 10 }); // 提高清晰度
             const canvas = document.createElement('canvas');
             canvas.id = 'page_' + pageNum;
             canvas.width = viewport.width;
