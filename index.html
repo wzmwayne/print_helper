@@ -18,7 +18,6 @@
     
     <div id="resultArea" hidden>
         <p id="resultInfo"></p>
-        <!-- 打印按钮会动态插入到这里 -->
         <a id="downloadOdd" href="#" download="奇数页.pdf">下载奇数页</a>
         <a id="downloadEven" href="#" download="偶数页.pdf">下载偶数页</a>
     </div>
@@ -68,7 +67,7 @@
             progressBar.value = 0;
             resultArea.hidden = true;
 
-            // 移除旧的打印按钮（如果存在）
+            // 移除旧打印按钮
             const oldPrintOdd = document.getElementById('printOddBtn');
             const oldPrintEven = document.getElementById('printEvenBtn');
             if (oldPrintOdd) oldPrintOdd.remove();
@@ -124,30 +123,91 @@
                 downloadEven.href = URL.createObjectURL(evenBlob);
 
                 resultInfo.textContent = `完成：原始 ${totalPages} 页 → 奇数页 ${oddDoc.getPageCount()} 页，偶数页 ${evenDoc.getPageCount()} 页`;
-                
-                // 创建打印按钮
+
+                // 创建打印按钮，采用“人教课本爬取器”的新窗口打印模式
                 const printOddBtn = document.createElement('button');
                 printOddBtn.id = 'printOddBtn';
                 printOddBtn.textContent = '🖨️ 打印奇数页';
                 printOddBtn.style.marginRight = '8px';
+                printOddBtn.addEventListener('click', () => {
+                    // 在新窗口中打开奇数页PDF并调用打印
+                    const printWindow = window.open('', '_blank');
+                    if (!printWindow) {
+                        alert('浏览器阻止了弹窗，请允许后重试');
+                        return;
+                    }
+                    printWindow.document.write(`
+                        <!DOCTYPE html>
+                        <html>
+                        <head>
+                            <meta charset="UTF-8">
+                            <title>打印奇数页</title>
+                            <style>
+                                * { margin: 0; padding: 0; box-sizing: border-box; }
+                                body, html { width: 100%; height: 100%; overflow: hidden; }
+                                iframe { width: 100%; height: 100%; border: none; }
+                                @page { margin: 0; }
+                            </style>
+                        </head>
+                        <body>
+                            <iframe id="pdfFrame" src="${downloadOdd.href}" style="width:100%; height:100%; border:none;"></iframe>
+                            <script>
+                                document.getElementById('pdfFrame').onload = function() {
+                                    setTimeout(() => {
+                                        window.print();
+                                    }, 500);
+                                };
+                            <\/script>
+                        </body>
+                        </html>
+                    `);
+                    printWindow.document.close();
+                });
 
                 const printEvenBtn = document.createElement('button');
                 printEvenBtn.id = 'printEvenBtn';
                 printEvenBtn.textContent = '🖨️ 打印偶数页';
-
-                printOddBtn.addEventListener('click', () => {
-                    window.open(downloadOdd.href);
-                });
                 printEvenBtn.addEventListener('click', () => {
-                    window.open(downloadEven.href);
+                    // 在新窗口中打开偶数页PDF并调用打印
+                    const printWindow = window.open('', '_blank');
+                    if (!printWindow) {
+                        alert('浏览器阻止了弹窗，请允许后重试');
+                        return;
+                    }
+                    printWindow.document.write(`
+                        <!DOCTYPE html>
+                        <html>
+                        <head>
+                            <meta charset="UTF-8">
+                            <title>打印偶数页</title>
+                            <style>
+                                * { margin: 0; padding: 0; box-sizing: border-box; }
+                                body, html { width: 100%; height: 100%; overflow: hidden; }
+                                iframe { width: 100%; height: 100%; border: none; }
+                                @page { margin: 0; }
+                            </style>
+                        </head>
+                        <body>
+                            <iframe id="pdfFrame" src="${downloadEven.href}" style="width:100%; height:100%; border:none;"></iframe>
+                            <script>
+                                document.getElementById('pdfFrame').onload = function() {
+                                    setTimeout(() => {
+                                        window.print();
+                                    }, 500);
+                                };
+                            <\/script>
+                        </body>
+                        </html>
+                    `);
+                    printWindow.document.close();
                 });
 
-                // 将按钮插入到下载链接之前
+                // 将打印按钮插入到下载链接之前
                 resultArea.insertBefore(printEvenBtn, downloadOdd);
                 resultArea.insertBefore(printOddBtn, printEvenBtn);
 
                 resultArea.hidden = false;
-                statusP.textContent = '处理完成，可点击下载或打印';
+                statusP.textContent = '处理完成，可点击打印或下载';
             } catch (error) {
                 statusP.textContent = '错误：' + error.message;
                 console.error(error);
