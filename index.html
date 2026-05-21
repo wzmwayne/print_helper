@@ -27,7 +27,7 @@
         ⚡ 本页面有动态功能，<a href="https://github.com/wzmwayne/ScriptWeaver" target="_blank" style="color:#3b82f6;">安装灵蝶</a> 后体验更好。
     </div>
     
-    <!-- 灵蝶未安装检测（普通脚本，所有浏览器均执行） -->
+    <!-- 灵蝶未安装检测 -->
     <script>
         (function() {
             if (!window.__ScriptWeaver__) {
@@ -36,7 +36,7 @@
         })();
     </script>
 
-    <!-- 核心功能由灵蝶注入执行 -->
+    <!-- 核心功能 -->
     <script type="x-tm-inline">
         const fileInput = document.getElementById('fileInput');
         const processBtn = document.getElementById('processBtn');
@@ -67,11 +67,11 @@
             progressBar.value = 0;
             resultArea.hidden = true;
 
-            // 移除旧打印按钮
-            const oldPrintOdd = document.getElementById('printOddBtn');
-            const oldPrintEven = document.getElementById('printEvenBtn');
-            if (oldPrintOdd) oldPrintOdd.remove();
-            if (oldPrintEven) oldPrintEven.remove();
+            // 移除旧按钮
+            const oldViewOdd = document.getElementById('viewOddBtn');
+            const oldViewEven = document.getElementById('viewEvenBtn');
+            if (oldViewOdd) oldViewOdd.remove();
+            if (oldViewEven) oldViewEven.remove();
 
             try {
                 const arrayBuffer = await selectedFile.arrayBuffer();
@@ -116,98 +116,42 @@
                 const oddPdfBytes = await oddDoc.save();
                 const evenPdfBytes = await evenDoc.save();
 
+                // 转换为 Base64 Data URL
+                const oddBase64 = arrayBufferToBase64(oddPdfBytes);
+                const evenBase64 = arrayBufferToBase64(evenPdfBytes);
+                const oddDataUrl = 'data:application/pdf;base64,' + oddBase64;
+                const evenDataUrl = 'data:application/pdf;base64,' + evenBase64;
+
+                // 下载链接保留 Blob URL（下载行为可接受）
                 const oddBlob = new Blob([oddPdfBytes], { type: 'application/pdf' });
                 const evenBlob = new Blob([evenPdfBytes], { type: 'application/pdf' });
-
                 downloadOdd.href = URL.createObjectURL(oddBlob);
                 downloadEven.href = URL.createObjectURL(evenBlob);
 
                 resultInfo.textContent = `完成：原始 ${totalPages} 页 → 奇数页 ${oddDoc.getPageCount()} 页，偶数页 ${evenDoc.getPageCount()} 页`;
 
-                // 创建打印按钮，采用“人教课本爬取器”的新窗口打印模式
-                const printOddBtn = document.createElement('button');
-                printOddBtn.id = 'printOddBtn';
-                printOddBtn.textContent = '🖨️ 打印奇数页';
-                printOddBtn.style.marginRight = '8px';
-                printOddBtn.addEventListener('click', () => {
-                    // 在新窗口中打开奇数页PDF并调用打印
-                    const printWindow = window.open('', '_blank');
-                    if (!printWindow) {
-                        alert('浏览器阻止了弹窗，请允许后重试');
-                        return;
-                    }
-                    printWindow.document.write(`
-                        <!DOCTYPE html>
-                        <html>
-                        <head>
-                            <meta charset="UTF-8">
-                            <title>打印奇数页</title>
-                            <style>
-                                * { margin: 0; padding: 0; box-sizing: border-box; }
-                                body, html { width: 100%; height: 100%; overflow: hidden; }
-                                iframe { width: 100%; height: 100%; border: none; }
-                                @page { margin: 0; }
-                            </style>
-                        </head>
-                        <body>
-                            <iframe id="pdfFrame" src="${downloadOdd.href}" style="width:100%; height:100%; border:none;"></iframe>
-                            <script>
-                                document.getElementById('pdfFrame').onload = function() {
-                                    setTimeout(() => {
-                                        window.print();
-                                    }, 500);
-                                };
-                            <\/script>
-                        </body>
-                        </html>
-                    `);
-                    printWindow.document.close();
+                // 创建查看按钮，使用 Data URL 直接显示 PDF
+                const viewOddBtn = document.createElement('button');
+                viewOddBtn.id = 'viewOddBtn';
+                viewOddBtn.textContent = '📄 查看奇数页';
+                viewOddBtn.style.marginRight = '8px';
+                viewOddBtn.addEventListener('click', () => {
+                    window.open(oddDataUrl, '_blank');
                 });
 
-                const printEvenBtn = document.createElement('button');
-                printEvenBtn.id = 'printEvenBtn';
-                printEvenBtn.textContent = '🖨️ 打印偶数页';
-                printEvenBtn.addEventListener('click', () => {
-                    // 在新窗口中打开偶数页PDF并调用打印
-                    const printWindow = window.open('', '_blank');
-                    if (!printWindow) {
-                        alert('浏览器阻止了弹窗，请允许后重试');
-                        return;
-                    }
-                    printWindow.document.write(`
-                        <!DOCTYPE html>
-                        <html>
-                        <head>
-                            <meta charset="UTF-8">
-                            <title>打印偶数页</title>
-                            <style>
-                                * { margin: 0; padding: 0; box-sizing: border-box; }
-                                body, html { width: 100%; height: 100%; overflow: hidden; }
-                                iframe { width: 100%; height: 100%; border: none; }
-                                @page { margin: 0; }
-                            </style>
-                        </head>
-                        <body>
-                            <iframe id="pdfFrame" src="${downloadEven.href}" style="width:100%; height:100%; border:none;"></iframe>
-                            <script>
-                                document.getElementById('pdfFrame').onload = function() {
-                                    setTimeout(() => {
-                                        window.print();
-                                    }, 500);
-                                };
-                            <\/script>
-                        </body>
-                        </html>
-                    `);
-                    printWindow.document.close();
+                const viewEvenBtn = document.createElement('button');
+                viewEvenBtn.id = 'viewEvenBtn';
+                viewEvenBtn.textContent = '📄 查看偶数页';
+                viewEvenBtn.addEventListener('click', () => {
+                    window.open(evenDataUrl, '_blank');
                 });
 
-                // 将打印按钮插入到下载链接之前
-                resultArea.insertBefore(printEvenBtn, downloadOdd);
-                resultArea.insertBefore(printOddBtn, printEvenBtn);
+                // 插入按钮
+                resultArea.insertBefore(viewEvenBtn, downloadOdd);
+                resultArea.insertBefore(viewOddBtn, viewEvenBtn);
 
                 resultArea.hidden = false;
-                statusP.textContent = '处理完成，可点击打印或下载';
+                statusP.textContent = '处理完成，可点击查看或下载';
             } catch (error) {
                 statusP.textContent = '错误：' + error.message;
                 console.error(error);
@@ -215,6 +159,16 @@
                 processBtn.disabled = false;
             }
         });
+
+        // 辅助函数：ArrayBuffer 转 Base64
+        function arrayBufferToBase64(buffer) {
+            let binary = '';
+            const bytes = new Uint8Array(buffer);
+            for (let i = 0; i < bytes.byteLength; i++) {
+                binary += String.fromCharCode(bytes[i]);
+            }
+            return btoa(binary);
+        }
     </script>
 </body>
 </html>
