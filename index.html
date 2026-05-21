@@ -36,7 +36,7 @@
         })();
     </script>
 
-    <!-- 核心功能 -->
+    <!-- 核心功能由灵蝶注入执行 -->
     <script type="x-tm-inline">
         const fileInput = document.getElementById('fileInput');
         const processBtn = document.getElementById('processBtn');
@@ -116,13 +116,7 @@
                 const oddPdfBytes = await oddDoc.save();
                 const evenPdfBytes = await evenDoc.save();
 
-                // 转换为 Base64 Data URL
-                const oddBase64 = arrayBufferToBase64(oddPdfBytes);
-                const evenBase64 = arrayBufferToBase64(evenPdfBytes);
-                const oddDataUrl = 'data:application/pdf;base64,' + oddBase64;
-                const evenDataUrl = 'data:application/pdf;base64,' + evenBase64;
-
-                // 下载链接保留 Blob URL（下载行为可接受）
+                // 下载链接仍保留（可选）
                 const oddBlob = new Blob([oddPdfBytes], { type: 'application/pdf' });
                 const evenBlob = new Blob([evenPdfBytes], { type: 'application/pdf' });
                 downloadOdd.href = URL.createObjectURL(oddBlob);
@@ -130,20 +124,20 @@
 
                 resultInfo.textContent = `完成：原始 ${totalPages} 页 → 奇数页 ${oddDoc.getPageCount()} 页，偶数页 ${evenDoc.getPageCount()} 页`;
 
-                // 创建查看按钮，使用 Data URL 直接显示 PDF
+                // 创建查看按钮，打开新窗口显示图片
                 const viewOddBtn = document.createElement('button');
                 viewOddBtn.id = 'viewOddBtn';
                 viewOddBtn.textContent = '📄 查看奇数页';
                 viewOddBtn.style.marginRight = '8px';
                 viewOddBtn.addEventListener('click', () => {
-                    window.open(oddDataUrl, '_blank');
+                    openPdfPreviewWindow(oddPdfBytes, '奇数页');
                 });
 
                 const viewEvenBtn = document.createElement('button');
                 viewEvenBtn.id = 'viewEvenBtn';
                 viewEvenBtn.textContent = '📄 查看偶数页';
                 viewEvenBtn.addEventListener('click', () => {
-                    window.open(evenDataUrl, '_blank');
+                    openPdfPreviewWindow(evenPdfBytes, '偶数页');
                 });
 
                 // 插入按钮
@@ -159,6 +153,165 @@
                 processBtn.disabled = false;
             }
         });
+
+        // 打开新窗口，使用 pdf.js 渲染 PDF 为图片，并模仿人教课本爬取器的界面
+        function openPdfPreviewWindow(pdfBytes, title) {
+            // 将 PDF 数据转为 base64
+            const base64 = arrayBufferToBase64(pdfBytes);
+            const dataUrl = 'data:application/pdf;base64,' + base64;
+
+            // 新窗口 HTML
+            const html = `<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>${title}预览</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { background: white; font-family: sans-serif; }
+        @page { margin: 0; }
+        #statusArea {
+            position: fixed;
+            top: 10px;
+            right: 10px;
+            background: white;
+            padding: 6px 10px;
+            border: 1px solid #aaa;
+            font-size: 14px;
+            z-index: 9999;
+        }
+        #controlPanel {
+            position: fixed;
+            top: 50px;
+            right: 10px;
+            background: white;
+            padding: 8px;
+            border: 1px solid #aaa;
+            font-size: 14px;
+            z-index: 9999;
+        }
+        button {
+            margin: 2px;
+            padding: 4px 8px;
+            cursor: pointer;
+        }
+        .page-container {
+            text-align: center;
+            margin: 0;
+            padding: 0;
+        }
+        canvas {
+            display: block;
+            margin: 0 auto;
+            width: 100%;
+            height: auto;
+        }
+    </style>
+</head>
+<body>
+    <div id="pagesContainer"></div>
+    <div id="statusArea">正在加载 PDF…</div>
+    <div id="controlPanel">
+        <button id="printActionBtn">强制调用打印</button>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"><\/script>
+    <script>
+        const dataUrl = "${dataUrl}";
+        const statusDiv = document.getElementById('statusArea');
+        const controlDiv = document.getElementById('controlPanel');
+        const printBtn = document.getElementById('printActionBtn');
+        const container = document.getElementById('pagesContainer');
+
+        let totalPages = 0;
+        let rendered = 0;
+        let timeoutTriggered = false;
+
+        function updateStatus() {
+            statusDiv.textContent = '已加载 ' + rendered + ' / ' + totalPages;
+            if (rendered >= totalPages && totalPages > 0) {
+                statusDiv.textContent = '全部加载完成，可调用打印';
+                printBtn.textContent = '调用打印';
+            }
+        }
+
+        function renderPage(page, pageNum) {
+            const viewport = page.getViewport({ scale: 2 }); // 提高清晰度
+            const canvas = document.createElement('canvas');
+            canvas.id = 'page_' + pageNum;
+            canvas.width = viewport.width;
+            canvas.height = viewport.height;
+            const ctx = canvas.getContext('2d');
+            
+            const div = document.createElement('div');
+            div.className = 'page-container';
+            div.appendChild(canvas);
+            container.appendChild(div);
+
+            page.render({ canvasContext: ctx, viewport: viewport }).promise.then(() => {
+                if (timeoutTriggered) return;
+                rendered++;
+                updateStatus();
+            }).catch(() => {
+                // 渲染失败也计数
+                if (timeoutTriggered) return;
+                rendered++;
+                updateStatus();
+            });
+        }
+
+        const loadingTask = pdfjsLib.getDocument(dataUrl);
+        loadingTask.promise.then((pdf) => {
+            totalPages = pdf.numPages;
+            statusDiv.textContent = '已加载 0 / ' + totalPages;
+
+            for (let i = 1; i <= totalPages; i++) {
+                pdf.getPage(i).then((page) => {
+                    renderPage(page, i);
+                }).catch(() => {
+                    // 页面获取失败，仍然计数
+                    if (timeoutTriggered) return;
+                    rendered++;
+                    updateStatus();
+                });
+            }
+
+            // 超时兜底：30 秒后强制置为完成
+            setTimeout(() => {
+                if (rendered < totalPages) {
+                    timeoutTriggered = true;
+                    rendered = totalPages;
+                    updateStatus();
+                }
+            }, 30000);
+        }).catch((err) => {
+            statusDiv.textContent = 'PDF 加载失败：' + err.message;
+        });
+
+        // 打印按钮
+        printBtn.addEventListener('click', () => {
+            statusDiv.style.display = 'none';
+            controlDiv.style.display = 'none';
+            setTimeout(() => {
+                window.print();
+                window.addEventListener('afterprint', () => {
+                    statusDiv.style.display = 'block';
+                    controlDiv.style.display = 'block';
+                }, { once: true });
+            }, 500);
+        });
+    <\/script>
+</body>
+</html>`;
+
+            const w = window.open('', '_blank');
+            if (!w) {
+                alert('浏览器阻止了弹窗，请允许后重试');
+                return;
+            }
+            w.document.write(html);
+            w.document.close();
+        }
 
         // 辅助函数：ArrayBuffer 转 Base64
         function arrayBufferToBase64(buffer) {
