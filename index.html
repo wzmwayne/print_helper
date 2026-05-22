@@ -18,6 +18,7 @@
     
     <div id="resultArea" hidden>
         <p id="resultInfo"></p>
+        <!-- 查看按钮会动态插入到这里 -->
         <a id="downloadOdd" href="#" download="奇数页.pdf">下载奇数页</a>
         <a id="downloadEven" href="#" download="偶数页.pdf">下载偶数页</a>
     </div>
@@ -27,7 +28,6 @@
         ⚡ 本页面有动态功能，<a href="https://github.com/wzmwayne/ScriptWeaver" target="_blank" style="color:#3b82f6;">安装灵蝶</a> 后体验更好。
     </div>
     
-    <!-- 灵蝶未安装检测 -->
     <script>
         (function() {
             if (!window.__ScriptWeaver__) {
@@ -36,7 +36,6 @@
         })();
     </script>
 
-    <!-- 核心功能由灵蝶注入执行 -->
     <script type="x-tm-inline">
         const fileInput = document.getElementById('fileInput');
         const processBtn = document.getElementById('processBtn');
@@ -67,7 +66,6 @@
             progressBar.value = 0;
             resultArea.hidden = true;
 
-            // 移除旧按钮
             const oldViewOdd = document.getElementById('viewOddBtn');
             const oldViewEven = document.getElementById('viewEvenBtn');
             if (oldViewOdd) oldViewOdd.remove();
@@ -116,7 +114,6 @@
                 const oddPdfBytes = await oddDoc.save();
                 const evenPdfBytes = await evenDoc.save();
 
-                // 下载链接仍保留（可选）
                 const oddBlob = new Blob([oddPdfBytes], { type: 'application/pdf' });
                 const evenBlob = new Blob([evenPdfBytes], { type: 'application/pdf' });
                 downloadOdd.href = URL.createObjectURL(oddBlob);
@@ -124,23 +121,30 @@
 
                 resultInfo.textContent = `完成：原始 ${totalPages} 页 → 奇数页 ${oddDoc.getPageCount()} 页，偶数页 ${evenDoc.getPageCount()} 页`;
 
-                // 创建查看按钮，打开新窗口显示图片
+                // 查看按钮 —— 增加缩放比例输入
                 const viewOddBtn = document.createElement('button');
                 viewOddBtn.id = 'viewOddBtn';
                 viewOddBtn.textContent = '📄 查看奇数页';
                 viewOddBtn.style.marginRight = '8px';
                 viewOddBtn.addEventListener('click', () => {
-                    openPdfPreviewWindow(oddPdfBytes, '奇数页');
+                    let scale = prompt('请输入渲染清晰度倍数（数字，越大越清晰，默认4，推荐2-5）：', '4');
+                    scale = parseFloat(scale);
+                    if (isNaN(scale) || scale <= 0) scale = 4;
+                    if (scale > 10) { alert('倍数过大可能造成浏览器卡顿，建议不超过10'); return; }
+                    openPdfPreviewWindow(oddPdfBytes, '奇数页', scale);
                 });
 
                 const viewEvenBtn = document.createElement('button');
                 viewEvenBtn.id = 'viewEvenBtn';
                 viewEvenBtn.textContent = '📄 查看偶数页';
                 viewEvenBtn.addEventListener('click', () => {
-                    openPdfPreviewWindow(evenPdfBytes, '偶数页');
+                    let scale = prompt('请输入渲染清晰度倍数（数字，越大越清晰，默认4，推荐2-5）：', '4');
+                    scale = parseFloat(scale);
+                    if (isNaN(scale) || scale <= 0) scale = 4;
+                    if (scale > 10) { alert('倍数过大可能造成浏览器卡顿，建议不超过10'); return; }
+                    openPdfPreviewWindow(evenPdfBytes, '偶数页', scale);
                 });
 
-                // 插入按钮
                 resultArea.insertBefore(viewEvenBtn, downloadOdd);
                 resultArea.insertBefore(viewOddBtn, viewEvenBtn);
 
@@ -154,13 +158,10 @@
             }
         });
 
-        // 打开新窗口，使用 pdf.js 渲染 PDF 为图片，并模仿人教课本爬取器的界面
-        function openPdfPreviewWindow(pdfBytes, title) {
-            // 将 PDF 数据转为 base64
+        function openPdfPreviewWindow(pdfBytes, title, scale) {
             const base64 = arrayBufferToBase64(pdfBytes);
             const dataUrl = 'data:application/pdf;base64,' + base64;
 
-            // 新窗口 HTML
             const html = `<!DOCTYPE html>
 <html>
 <head>
@@ -205,19 +206,22 @@
             margin: 0 auto;
             width: 100%;
             height: auto;
+            min-width: 800px;
         }
     </style>
 </head>
 <body>
     <div id="pagesContainer"></div>
-    <div id="statusArea">正在加载 PDF…</div>
+    <div id="statusArea">正在加载 PDF (缩放倍数: ${scale})…</div>
     <div id="controlPanel">
         <button id="printActionBtn">强制调用打印</button>
+        <p style="font-size:12px;color:#666;">倍数越高越清晰，但渲染更慢</p>
     </div>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"><\/script>
     <script>
         const dataUrl = "${dataUrl}";
+        const SCALE = ${scale};
         const statusDiv = document.getElementById('statusArea');
         const controlDiv = document.getElementById('controlPanel');
         const printBtn = document.getElementById('printActionBtn');
@@ -228,7 +232,7 @@
         let timeoutTriggered = false;
 
         function updateStatus() {
-            statusDiv.textContent = '已加载 ' + rendered + ' / ' + totalPages;
+            statusDiv.textContent = '已加载 ' + rendered + ' / ' + totalPages + ' (倍数: ' + SCALE + ')';
             if (rendered >= totalPages && totalPages > 0) {
                 statusDiv.textContent = '全部加载完成，可调用打印';
                 printBtn.textContent = '调用打印';
@@ -236,13 +240,36 @@
         }
 
         function renderPage(page, pageNum) {
-            const viewport = page.getViewport({ scale: 10 }); // 提高清晰度
+            const viewport = page.getViewport({ scale: SCALE });
             const canvas = document.createElement('canvas');
             canvas.id = 'page_' + pageNum;
             canvas.width = viewport.width;
             canvas.height = viewport.height;
+
+            // 如果单页宽度超过5000px，给出警告并降级
+            if (viewport.width > 5000) {
+                const fallbackScale = Math.min(SCALE, 3);
+                const fallbackViewport = page.getViewport({ scale: fallbackScale });
+                canvas.width = fallbackViewport.width;
+                canvas.height = fallbackViewport.height;
+                const ctx = canvas.getContext('2d');
+                const div = document.createElement('div');
+                div.className = 'page-container';
+                div.appendChild(canvas);
+                container.appendChild(div);
+                page.render({ canvasContext: ctx, viewport: fallbackViewport }).promise.then(() => {
+                    if (timeoutTriggered) return;
+                    rendered++;
+                    updateStatus();
+                }).catch(() => {
+                    if (timeoutTriggered) return;
+                    rendered++;
+                    updateStatus();
+                });
+                return;
+            }
+
             const ctx = canvas.getContext('2d');
-            
             const div = document.createElement('div');
             div.className = 'page-container';
             div.appendChild(canvas);
@@ -253,7 +280,6 @@
                 rendered++;
                 updateStatus();
             }).catch(() => {
-                // 渲染失败也计数
                 if (timeoutTriggered) return;
                 rendered++;
                 updateStatus();
@@ -269,26 +295,25 @@
                 pdf.getPage(i).then((page) => {
                     renderPage(page, i);
                 }).catch(() => {
-                    // 页面获取失败，仍然计数
                     if (timeoutTriggered) return;
                     rendered++;
                     updateStatus();
                 });
             }
 
-            // 超时兜底：30 秒后强制置为完成
+            // 根据倍数动态调整超时时间（每页约2秒，最少15秒）
+            const timeout = Math.max(15000, totalPages * 2000);
             setTimeout(() => {
                 if (rendered < totalPages) {
                     timeoutTriggered = true;
                     rendered = totalPages;
                     updateStatus();
                 }
-            }, 30000);
+            }, timeout);
         }).catch((err) => {
             statusDiv.textContent = 'PDF 加载失败：' + err.message;
         });
 
-        // 打印按钮
         printBtn.addEventListener('click', () => {
             statusDiv.style.display = 'none';
             controlDiv.style.display = 'none';
@@ -313,7 +338,6 @@
             w.document.close();
         }
 
-        // 辅助函数：ArrayBuffer 转 Base64
         function arrayBufferToBase64(buffer) {
             let binary = '';
             const bytes = new Uint8Array(buffer);
