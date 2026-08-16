@@ -2,350 +2,495 @@
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
-    <title>手动双面打印助手 - 灵蝶版</title>
-    <script src="https://unpkg.com/pdf-lib@1.17.1/dist/pdf-lib.min.js"></script>
-</head>
-<body>
-    <h1>📄 手动双面打印助手</h1>
-    <p>上传PDF，自动分离奇偶页并逆序排列（需灵蝶）</p>
-    
-    <input type="file" id="fileInput" accept=".pdf">
-    <br><br>
-    <button id="processBtn" disabled>开始处理</button>
-    
-    <p id="status">就绪</p>
-    <progress id="progressBar" value="0" max="100"></progress>
-    
-    <div id="resultArea" hidden>
-        <p id="resultInfo"></p>
-        <!-- 查看按钮会动态插入到这里 -->
-        <a id="downloadOdd" href="#" download="奇数页.pdf">下载奇数页</a>
-        <a id="downloadEven" href="#" download="偶数页.pdf">下载偶数页</a>
-    </div>
-
-    <!-- 灵蝶未安装提示 -->
-    <div id="sw-install-hint" style="position:fixed;bottom:20px;right:20px;background:#2c3e50;color:#ecf0f1;padding:10px 16px;font-size:14px;z-index:9999;display:none;">
-        ⚡ 本页面有动态功能，<a href="https://github.com/wzmwayne/ScriptWeaver" target="_blank" style="color:#3b82f6;">安装灵蝶</a> 后体验更好。
-    </div>
-    
-    <script>
-        (function() {
-            if (!window.__ScriptWeaver__) {
-                document.getElementById('sw-install-hint').style.display = 'block';
-            }
-        })();
+    <title>手动双面打印助手</title>
+    <!-- 使用更稳定的 cdnjs 镜像 -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js">
     </script>
-
-    <script type="x-tm-inline">
-        const fileInput = document.getElementById('fileInput');
-        const processBtn = document.getElementById('processBtn');
-        const statusP = document.getElementById('status');
-        const progressBar = document.getElementById('progressBar');
-        const resultArea = document.getElementById('resultArea');
-        const resultInfo = document.getElementById('resultInfo');
-        const downloadOdd = document.getElementById('downloadOdd');
-        const downloadEven = document.getElementById('downloadEven');
-
-        let selectedFile = null;
-
-        fileInput.addEventListener('change', () => {
-            selectedFile = fileInput.files[0];
-            if (selectedFile && selectedFile.type === 'application/pdf') {
-                processBtn.disabled = false;
-                statusP.textContent = '已选择文件：' + selectedFile.name;
-            } else {
-                processBtn.disabled = true;
-                statusP.textContent = '请选择有效的PDF文件';
-            }
-        });
-
-        processBtn.addEventListener('click', async () => {
-            if (!selectedFile) return;
-            processBtn.disabled = true;
-            statusP.textContent = '读取文件中...';
-            progressBar.value = 0;
-            resultArea.hidden = true;
-
-            const oldViewOdd = document.getElementById('viewOddBtn');
-            const oldViewEven = document.getElementById('viewEvenBtn');
-            if (oldViewOdd) oldViewOdd.remove();
-            if (oldViewEven) oldViewEven.remove();
-
-            try {
-                const arrayBuffer = await selectedFile.arrayBuffer();
-                const pdfDoc = await PDFLib.PDFDocument.load(arrayBuffer);
-                const totalPages = pdfDoc.getPageCount();
-                
-                statusP.textContent = `共 ${totalPages} 页，正在分离...`;
-                progressBar.max = totalPages;
-
-                const oddDoc = await PDFLib.PDFDocument.create();
-                const evenDoc = await PDFLib.PDFDocument.create();
-
-                const oddIndices = [];
-                const evenIndices = [];
-                for (let i = 0; i < totalPages; i++) {
-                    if (i % 2 === 0) {
-                        oddIndices.push(i);
-                    } else {
-                        evenIndices.push(i);
-                    }
-                }
-                oddIndices.reverse();
-                evenIndices.reverse();
-
-                let processed = 0;
-                for (const idx of oddIndices) {
-                    const [copiedPage] = await oddDoc.copyPages(pdfDoc, [idx]);
-                    oddDoc.addPage(copiedPage);
-                    processed++;
-                    progressBar.value = processed;
-                    statusP.textContent = `处理奇数页 ${processed}/${oddIndices.length}`;
-                }
-
-                for (const idx of evenIndices) {
-                    const [copiedPage] = await evenDoc.copyPages(pdfDoc, [idx]);
-                    evenDoc.addPage(copiedPage);
-                    processed++;
-                    progressBar.value = processed;
-                    statusP.textContent = `处理偶数页 ${processed - oddIndices.length}/${evenIndices.length}`;
-                }
-
-                const oddPdfBytes = await oddDoc.save();
-                const evenPdfBytes = await evenDoc.save();
-
-                const oddBlob = new Blob([oddPdfBytes], { type: 'application/pdf' });
-                const evenBlob = new Blob([evenPdfBytes], { type: 'application/pdf' });
-                downloadOdd.href = URL.createObjectURL(oddBlob);
-                downloadEven.href = URL.createObjectURL(evenBlob);
-
-                resultInfo.textContent = `完成：原始 ${totalPages} 页 → 奇数页 ${oddDoc.getPageCount()} 页，偶数页 ${evenDoc.getPageCount()} 页`;
-
-                // 查看按钮 —— 增加缩放比例输入
-                const viewOddBtn = document.createElement('button');
-                viewOddBtn.id = 'viewOddBtn';
-                viewOddBtn.textContent = '📄 查看奇数页';
-                viewOddBtn.style.marginRight = '8px';
-                viewOddBtn.addEventListener('click', () => {
-                    let scale = prompt('请输入渲染清晰度倍数（数字，越大越清晰，默认4，推荐2-5）：', '4');
-                    scale = parseFloat(scale);
-                    if (isNaN(scale) || scale <= 0) scale = 4;
-                    if (scale > 10) { alert('倍数过大可能造成浏览器卡顿，建议不超过10'); return; }
-                    openPdfPreviewWindow(oddPdfBytes, '奇数页', scale);
-                });
-
-                const viewEvenBtn = document.createElement('button');
-                viewEvenBtn.id = 'viewEvenBtn';
-                viewEvenBtn.textContent = '📄 查看偶数页';
-                viewEvenBtn.addEventListener('click', () => {
-                    let scale = prompt('请输入渲染清晰度倍数（数字，越大越清晰，默认4，推荐2-5）：', '4');
-                    scale = parseFloat(scale);
-                    if (isNaN(scale) || scale <= 0) scale = 4;
-                    if (scale > 10) { alert('倍数过大可能造成浏览器卡顿，建议不超过10'); return; }
-                    openPdfPreviewWindow(evenPdfBytes, '偶数页', scale);
-                });
-
-                resultArea.insertBefore(viewEvenBtn, downloadOdd);
-                resultArea.insertBefore(viewOddBtn, viewEvenBtn);
-
-                resultArea.hidden = false;
-                statusP.textContent = '处理完成，可点击查看或下载';
-            } catch (error) {
-                statusP.textContent = '错误：' + error.message;
-                console.error(error);
-            } finally {
-                processBtn.disabled = false;
-            }
-        });
-
-        function openPdfPreviewWindow(pdfBytes, title, scale) {
-            const base64 = arrayBufferToBase64(pdfBytes);
-            const dataUrl = 'data:application/pdf;base64,' + base64;
-
-            const html = `<!DOCTYPE html>
-<html>
-<head>
-    <meta charset="UTF-8">
-    <title>${title}预览</title>
     <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        body { background: white; font-family: sans-serif; }
-        @page { margin: 0; }
-        #statusArea {
-            position: fixed;
-            top: 10px;
-            right: 10px;
-            background: white;
-            padding: 6px 10px;
-            border: 1px solid #aaa;
-            font-size: 14px;
-            z-index: 9999;
+        /* 样式同前，保持清晰 */
+        body {
+            font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+            max-width: 720px;
+            margin: 40px auto;
+            padding: 0 20px;
+            background: #f8fafc;
+            color: #0f172a;
         }
-        #controlPanel {
-            position: fixed;
-            top: 50px;
-            right: 10px;
-            background: white;
-            padding: 8px;
-            border: 1px solid #aaa;
-            font-size: 14px;
-            z-index: 9999;
+        h1 {
+            font-weight: 600;
+            font-size: 1.8rem;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .card {
+            background: #ffffff;
+            padding: 24px 28px;
+            border-radius: 16px;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.06);
+            margin-top: 20px;
+        }
+        input[type="file"] {
+            display: block;
+            margin: 12px 0 16px;
+            padding: 10px 0;
+            width: 100%;
         }
         button {
-            margin: 2px;
-            padding: 4px 8px;
+            background: #1e293b;
+            color: white;
+            border: none;
+            padding: 10px 24px;
+            border-radius: 40px;
+            font-size: 1rem;
+            font-weight: 500;
             cursor: pointer;
+            transition: background 0.2s;
         }
-        .page-container {
-            text-align: center;
-            margin: 0;
-            padding: 0;
+        button:hover:not(:disabled) {
+            background: #0f172a;
         }
-        canvas {
-            display: block;
-            margin: 0 auto;
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+        #status {
+            margin: 16px 0 8px;
+            font-size: 0.95rem;
+            color: #334155;
+        }
+        progress {
             width: 100%;
-            height: auto;
-            min-width: 800px;
+            height: 8px;
+            border-radius: 40px;
+            appearance: none;
+            background: #e2e8f0;
+        }
+        progress::-webkit-progress-bar {
+            background: #e2e8f0;
+            border-radius: 40px;
+        }
+        progress::-webkit-progress-value {
+            background: #3b82f6;
+            border-radius: 40px;
+        }
+        #resultArea {
+            margin-top: 20px;
+            padding-top: 18px;
+            border-top: 1px solid #e2e8f0;
+        }
+        #resultInfo {
+            font-weight: 500;
+            margin-bottom: 12px;
+        }
+        .action-group {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            align-items: center;
+        }
+        .action-group a,
+        .action-group button {
+            display: inline-block;
+            background: #f1f5f9;
+            color: #0f172a;
+            padding: 6px 16px;
+            border-radius: 40px;
+            text-decoration: none;
+            font-size: 0.9rem;
+            font-weight: 500;
+            border: 1px solid #e2e8f0;
+            transition: background 0.2s;
+            cursor: pointer;
+            background: transparent;
+            border: 1px solid #cbd5e1;
+        }
+        .action-group a:hover,
+        .action-group button:hover {
+            background: #e2e8f0;
+        }
+        .action-group a {
+            background: #eef2ff;
+            border-color: #818cf8;
+            color: #3730a3;
+        }
+        .action-group a:hover {
+            background: #c7d2fe;
+        }
+        .hint {
+            margin-top: 20px;
+            font-size: 0.85rem;
+            color: #64748b;
+            border-top: 1px dashed #e2e8f0;
+            padding-top: 16px;
         }
     </style>
 </head>
 <body>
-    <div id="pagesContainer"></div>
-    <div id="statusArea">正在加载 PDF (缩放倍数: ${scale})…</div>
-    <div id="controlPanel">
-        <button id="printActionBtn">强制调用打印</button>
-        <p style="font-size:12px;color:#666;">倍数越高越清晰，但渲染更慢</p>
+
+    <h1>📄 手动双面打印助手</h1>
+    <p style="color:#475569; margin-top:-6px;">上传 PDF，自动分离奇偶页并逆序排列</p>
+
+    <div class="card">
+        <input type="file" id="fileInput" accept=".pdf" />
+        <button id="processBtn" disabled>开始处理</button>
+
+        <div id="status">就绪</div>
+        <progress id="progressBar" value="0" max="100"></progress>
+
+        <div id="resultArea" hidden>
+            <div id="resultInfo"></div>
+            <div class="action-group" id="actionGroup">
+                <!-- 查看按钮和下载链接由 JS 动态插入 -->
+            </div>
+        </div>
+
+        <div class="hint">
+            ⚡ 使用 <a href="https://pdf-lib.js.org/" target="_blank" style="color:#2563eb;">pdf-lib</a> 在浏览器端处理，文件不会上传到服务器。
+        </div>
     </div>
 
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"><\/script>
     <script>
-        const dataUrl = "${dataUrl}";
-        const SCALE = ${scale};
-        const statusDiv = document.getElementById('statusArea');
-        const controlDiv = document.getElementById('controlPanel');
-        const printBtn = document.getElementById('printActionBtn');
-        const container = document.getElementById('pagesContainer');
+        (function() {
+            'use strict';
 
-        let totalPages = 0;
-        let rendered = 0;
-        let timeoutTriggered = false;
-
-        function updateStatus() {
-            statusDiv.textContent = '已加载 ' + rendered + ' / ' + totalPages + ' (倍数: ' + SCALE + ')';
-            if (rendered >= totalPages && totalPages > 0) {
-                statusDiv.textContent = '全部加载完成，可调用打印';
-                printBtn.textContent = '调用打印';
-            }
-        }
-
-        function renderPage(page, pageNum) {
-            const viewport = page.getViewport({ scale: SCALE });
-            const canvas = document.createElement('canvas');
-            canvas.id = 'page_' + pageNum;
-            canvas.width = viewport.width;
-            canvas.height = viewport.height;
-
-            // 如果单页宽度超过5000px，给出警告并降级
-            if (viewport.width > 5000) {
-                const fallbackScale = Math.min(SCALE, 3);
-                const fallbackViewport = page.getViewport({ scale: fallbackScale });
-                canvas.width = fallbackViewport.width;
-                canvas.height = fallbackViewport.height;
-                const ctx = canvas.getContext('2d');
-                const div = document.createElement('div');
-                div.className = 'page-container';
-                div.appendChild(canvas);
-                container.appendChild(div);
-                page.render({ canvasContext: ctx, viewport: fallbackViewport }).promise.then(() => {
-                    if (timeoutTriggered) return;
-                    rendered++;
-                    updateStatus();
-                }).catch(() => {
-                    if (timeoutTriggered) return;
-                    rendered++;
-                    updateStatus();
-                });
-                return;
+            // ---- 检测 pdf-lib 是否加载成功 ----
+            if (typeof PDFLib === 'undefined') {
+                const statusP = document.getElementById('status');
+                statusP.textContent = '❌ pdf-lib 库未能加载，请检查网络连接后刷新页面。';
+                document.getElementById('processBtn').disabled = true;
+                console.error('PDFLib is not defined. 请确认 CDN 地址可访问。');
+                return; // 终止执行
             }
 
-            const ctx = canvas.getContext('2d');
-            const div = document.createElement('div');
-            div.className = 'page-container';
-            div.appendChild(canvas);
-            container.appendChild(div);
+            // ---- DOM refs ----
+            const fileInput = document.getElementById('fileInput');
+            const processBtn = document.getElementById('processBtn');
+            const statusP = document.getElementById('status');
+            const progressBar = document.getElementById('progressBar');
+            const resultArea = document.getElementById('resultArea');
+            const resultInfo = document.getElementById('resultInfo');
+            const actionGroup = document.getElementById('actionGroup');
 
-            page.render({ canvasContext: ctx, viewport: viewport }).promise.then(() => {
-                if (timeoutTriggered) return;
-                rendered++;
-                updateStatus();
-            }).catch(() => {
-                if (timeoutTriggered) return;
-                rendered++;
-                updateStatus();
-            });
-        }
+            let selectedFile = null;
 
-        const loadingTask = pdfjsLib.getDocument(dataUrl);
-        loadingTask.promise.then((pdf) => {
-            totalPages = pdf.numPages;
-            statusDiv.textContent = '已加载 0 / ' + totalPages;
-
-            for (let i = 1; i <= totalPages; i++) {
-                pdf.getPage(i).then((page) => {
-                    renderPage(page, i);
-                }).catch(() => {
-                    if (timeoutTriggered) return;
-                    rendered++;
-                    updateStatus();
-                });
-            }
-
-            // 根据倍数动态调整超时时间（每页约2秒，最少15秒）
-            const timeout = Math.max(15000, totalPages * 2000);
-            setTimeout(() => {
-                if (rendered < totalPages) {
-                    timeoutTriggered = true;
-                    rendered = totalPages;
-                    updateStatus();
+            // ---- 文件选择 ----
+            fileInput.addEventListener('change', function() {
+                const file = fileInput.files[0];
+                if (file && file.type === 'application/pdf') {
+                    selectedFile = file;
+                    processBtn.disabled = false;
+                    statusP.textContent = '已选择：' + file.name;
+                } else {
+                    selectedFile = null;
+                    processBtn.disabled = true;
+                    statusP.textContent = '请选择有效的 PDF 文件';
                 }
-            }, timeout);
-        }).catch((err) => {
-            statusDiv.textContent = 'PDF 加载失败：' + err.message;
-        });
+            });
 
-        printBtn.addEventListener('click', () => {
-            statusDiv.style.display = 'none';
-            controlDiv.style.display = 'none';
-            setTimeout(() => {
+            // ---- 主处理 ----
+            processBtn.addEventListener('click', async function() {
+                if (!selectedFile) return;
+
+                // 重置 UI
+                processBtn.disabled = true;
+                statusP.textContent = '读取文件中…';
+                progressBar.value = 0;
+                resultArea.hidden = true;
+                actionGroup.innerHTML = '';
+
+                try {
+                    const arrayBuffer = await selectedFile.arrayBuffer();
+                    const pdfDoc = await PDFLib.PDFDocument.load(arrayBuffer);
+                    const totalPages = pdfDoc.getPageCount();
+
+                    statusP.textContent = '共 ' + totalPages + ' 页，正在分离…';
+                    progressBar.max = totalPages;
+
+                    const oddDoc = await PDFLib.PDFDocument.create();
+                    const evenDoc = await PDFLib.PDFDocument.create();
+
+                    const oddIndices = [];
+                    const evenIndices = [];
+                    for (let i = 0; i < totalPages; i++) {
+                        if (i % 2 === 0) oddIndices.push(i);
+                        else evenIndices.push(i);
+                    }
+                    // 逆序（方便双面打印时顺序正确）
+                    oddIndices.reverse();
+                    evenIndices.reverse();
+
+                    let processed = 0;
+
+                    for (const idx of oddIndices) {
+                        const [copied] = await oddDoc.copyPages(pdfDoc, [idx]);
+                        oddDoc.addPage(copied);
+                        processed++;
+                        progressBar.value = processed;
+                        statusP.textContent = '处理奇数页 ' + processed + '/' + (oddIndices.length + evenIndices
+                        .length);
+                    }
+
+                    for (const idx of evenIndices) {
+                        const [copied] = await evenDoc.copyPages(pdfDoc, [idx]);
+                        evenDoc.addPage(copied);
+                        processed++;
+                        progressBar.value = processed;
+                        statusP.textContent = '处理偶数页 ' + (processed - oddIndices.length) + '/' + evenIndices
+                        .length;
+                    }
+
+                    const oddPdfBytes = await oddDoc.save();
+                    const evenPdfBytes = await evenDoc.save();
+
+                    const oddBlob = new Blob([oddPdfBytes], { type: 'application/pdf' });
+                    const evenBlob = new Blob([evenPdfBytes], { type: 'application/pdf' });
+
+                    const oddUrl = URL.createObjectURL(oddBlob);
+                    const evenUrl = URL.createObjectURL(evenBlob);
+
+                    resultInfo.textContent =
+                        '✅ 完成：原始 ' + totalPages + ' 页 → 奇数页 ' + oddDoc.getPageCount() +
+                        ' 页，偶数页 ' + evenDoc.getPageCount() + ' 页';
+
+                    // ---- 查看按钮 ----
+                    const viewOddBtn = document.createElement('button');
+                    viewOddBtn.textContent = '📄 查看奇数页';
+                    viewOddBtn.addEventListener('click', function() {
+                        let scale = prompt('渲染清晰度倍数（数字，默认 4，推荐 2~5）：', '4');
+                        scale = parseFloat(scale);
+                        if (isNaN(scale) || scale <= 0) scale = 4;
+                        if (scale > 10) {
+                            alert('倍数过大可能卡顿，建议不超过 10');
+                            return;
+                        }
+                        openPdfPreviewWindow(oddPdfBytes, '奇数页', scale);
+                    });
+
+                    const viewEvenBtn = document.createElement('button');
+                    viewEvenBtn.textContent = '📄 查看偶数页';
+                    viewEvenBtn.addEventListener('click', function() {
+                        let scale = prompt('渲染清晰度倍数（数字，默认 4，推荐 2~5）：', '4');
+                        scale = parseFloat(scale);
+                        if (isNaN(scale) || scale <= 0) scale = 4;
+                        if (scale > 10) {
+                            alert('倍数过大可能卡顿，建议不超过 10');
+                            return;
+                        }
+                        openPdfPreviewWindow(evenPdfBytes, '偶数页', scale);
+                    });
+
+                    const downloadOdd = document.createElement('a');
+                    downloadOdd.href = oddUrl;
+                    downloadOdd.download = '奇数页.pdf';
+                    downloadOdd.textContent = '⬇ 下载奇数页';
+
+                    const downloadEven = document.createElement('a');
+                    downloadEven.href = evenUrl;
+                    downloadEven.download = '偶数页.pdf';
+                    downloadEven.textContent = '⬇ 下载偶数页';
+
+                    actionGroup.appendChild(viewOddBtn);
+                    actionGroup.appendChild(viewEvenBtn);
+                    actionGroup.appendChild(downloadOdd);
+                    actionGroup.appendChild(downloadEven);
+
+                    resultArea.hidden = false;
+                    statusP.textContent = '处理完成，可点击查看或下载';
+
+                } catch (error) {
+                    statusP.textContent = '❌ 错误：' + error.message;
+                    console.error(error);
+                } finally {
+                    processBtn.disabled = false;
+                }
+            });
+
+            // ---- PDF 预览弹窗（使用 pdf.js） ----
+            function openPdfPreviewWindow(pdfBytes, title, scale) {
+                const base64 = arrayBufferToBase64(pdfBytes);
+                const dataUrl = 'data:application/pdf;base64,' + base64;
+
+                const html = `<!DOCTYPE html>
+        <html>
+        <head>
+          <meta charset="UTF-8" />
+          <title>${title} 预览</title>
+          <style>
+            * { margin:0; padding:0; box-sizing:border-box; }
+            body { background:#f1f5f9; font-family:system-ui,sans-serif; }
+            #statusArea {
+              position:fixed; top:12px; right:16px;
+              background:rgba(255,255,255,0.92);
+              padding:6px 14px;
+              border-radius:40px;
+              font-size:13px;
+              box-shadow:0 2px 8px rgba(0,0,0,0.08);
+              z-index:9999;
+              backdrop-filter:blur(4px);
+            }
+            #controlPanel {
+              position:fixed; top:60px; right:16px;
+              background:rgba(255,255,255,0.92);
+              padding:10px 14px;
+              border-radius:12px;
+              box-shadow:0 2px 12px rgba(0,0,0,0.08);
+              font-size:13px;
+              z-index:9999;
+              backdrop-filter:blur(4px);
+              display:flex;
+              flex-direction:column;
+              gap:6px;
+              align-items:center;
+            }
+            #controlPanel button {
+              background:#1e293b;
+              color:#fff;
+              border:none;
+              padding:6px 18px;
+              border-radius:40px;
+              font-weight:500;
+              cursor:pointer;
+              font-size:13px;
+            }
+            #controlPanel button:hover { background:#0f172a; }
+            #controlPanel .hint {
+              font-size:11px;
+              color:#64748b;
+              margin:0;
+            }
+            .page-container { text-align:center; margin:0; padding:0; }
+            canvas {
+              display:block;
+              margin:0 auto;
+              width:100%;
+              height:auto;
+              min-width:600px;
+              box-shadow:0 1px 4px rgba(0,0,0,0.04);
+            }
+            @media print {
+              #statusArea, #controlPanel { display:none !important; }
+              canvas { min-width:auto; box-shadow:none; }
+            }
+          </style>
+        </head>
+        <body>
+          <div id="pagesContainer"></div>
+          <div id="statusArea">⏳ 加载中 (缩放 ×${scale})</div>
+          <div id="controlPanel">
+            <button id="printActionBtn">🖨 调用打印</button>
+            <p class="hint">倍数越高越清晰，渲染稍慢</p>
+          </div>
+
+          <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/2.16.105/pdf.min.js"><\/script>
+          <script>
+            const dataUrl = "${dataUrl}";
+            const SCALE = ${scale};
+            const statusDiv = document.getElementById('statusArea');
+            const printBtn = document.getElementById('printActionBtn');
+            const container = document.getElementById('pagesContainer');
+
+            let totalPages = 0;
+            let rendered = 0;
+            let timeoutTriggered = false;
+
+            function updateStatus() {
+              if (rendered >= totalPages && totalPages > 0) {
+                statusDiv.textContent = '✅ 全部加载完成 (×${scale})';
+                printBtn.textContent = '🖨 调用打印';
+              } else {
+                statusDiv.textContent = '⏳ 加载 ' + rendered + ' / ' + totalPages + ' (×${scale})';
+              }
+            }
+
+            function renderPage(page, pageNum) {
+              const viewport = page.getViewport({ scale: SCALE });
+              const canvas = document.createElement('canvas');
+              canvas.id = 'page_' + pageNum;
+
+              let usedScale = SCALE;
+              if (viewport.width > 5000) {
+                usedScale = Math.min(SCALE, 3);
+              }
+              const finalViewport = page.getViewport({ scale: usedScale });
+              canvas.width = finalViewport.width;
+              canvas.height = finalViewport.height;
+
+              const ctx = canvas.getContext('2d');
+              const div = document.createElement('div');
+              div.className = 'page-container';
+              div.appendChild(canvas);
+              container.appendChild(div);
+
+              page.render({ canvasContext: ctx, viewport: finalViewport }).promise
+                .then(() => {
+                  if (!timeoutTriggered) { rendered++; updateStatus(); }
+                })
+                .catch(() => {
+                  if (!timeoutTriggered) { rendered++; updateStatus(); }
+                });
+            }
+
+            const loadingTask = pdfjsLib.getDocument(dataUrl);
+            loadingTask.promise.then((pdf) => {
+              totalPages = pdf.numPages;
+              statusDiv.textContent = '⏳ 加载 0 / ' + totalPages + ' (×${scale})';
+
+              for (let i = 1; i <= totalPages; i++) {
+                pdf.getPage(i).then((page) => renderPage(page, i))
+                  .catch(() => {
+                    if (!timeoutTriggered) { rendered++; updateStatus(); }
+                  });
+              }
+
+              const timeout = Math.max(15000, totalPages * 2000);
+              setTimeout(() => {
+                if (rendered < totalPages) {
+                  timeoutTriggered = true;
+                  rendered = totalPages;
+                  updateStatus();
+                }
+              }, timeout);
+            }).catch((err) => {
+              statusDiv.textContent = '❌ PDF 加载失败：' + err.message;
+            });
+
+            printBtn.addEventListener('click', function() {
+              statusDiv.style.display = 'none';
+              document.getElementById('controlPanel').style.display = 'none';
+              setTimeout(() => {
                 window.print();
-                window.addEventListener('afterprint', () => {
-                    statusDiv.style.display = 'block';
-                    controlDiv.style.display = 'block';
+                window.addEventListener('afterprint', function() {
+                  statusDiv.style.display = 'block';
+                  document.getElementById('controlPanel').style.display = 'flex';
                 }, { once: true });
-            }, 500);
-        });
-    <\/script>
-</body>
-</html>`;
+              }, 400);
+            });
+          <\/script>
+        </body>
+        </html>`;
 
-            const w = window.open('', '_blank');
-            if (!w) {
-                alert('浏览器阻止了弹窗，请允许后重试');
-                return;
+                const w = window.open('', '_blank');
+                if (!w) {
+                    alert('浏览器阻止了弹窗，请允许弹出窗口后重试');
+                    return;
+                }
+                w.document.write(html);
+                w.document.close();
             }
-            w.document.write(html);
-            w.document.close();
-        }
 
-        function arrayBufferToBase64(buffer) {
-            let binary = '';
-            const bytes = new Uint8Array(buffer);
-            for (let i = 0; i < bytes.byteLength; i++) {
-                binary += String.fromCharCode(bytes[i]);
+            // ---- 工具：ArrayBuffer → Base64 ----
+            function arrayBufferToBase64(buffer) {
+                let binary = '';
+                const bytes = new Uint8Array(buffer);
+                for (let i = 0; i < bytes.byteLength; i++) {
+                    binary += String.fromCharCode(bytes[i]);
+                }
+                return btoa(binary);
             }
-            return btoa(binary);
-        }
+
+        })();
     </script>
+
 </body>
 </html>
